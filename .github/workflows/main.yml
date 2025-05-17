@@ -23,7 +23,7 @@ jobs:
         run: |
           gcloud config set project ${{ secrets.PROJECT_ID }}
           gcloud config set compute/zone ${{ secrets.GKE_ZONE }}
-          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} --region ${{ secrets.GKE_ZONE }}
+          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} --region us-central1
           sudo apt-get update -y
           sudo apt-get install -y kubectl
           gcloud components install kubectl
