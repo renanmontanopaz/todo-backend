@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backend-deployment
-  namespace: production # Garante que o deployment seja criado no namespace correto
+  namespace: approval # Garante que o deployment seja criado no namespace correto
 spec:
   replicas: 1 # Ajuste conforme necessário
   selector:
