@@ -2,11 +2,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backend-deployment
-  namespace: approval # ou approval
+  namespace: approval
   labels:
     app: backend
 spec:
-  replicas: 1
+  replicas: 1 # Ou o número desejado
   selector:
     matchLabels:
       app: backend
@@ -16,26 +16,63 @@ spec:
         app: backend
     spec:
       containers:
-        - name: backend
-          image: renanmontanopaz/backend:latest
+        - name: backend # Nome do container, usado no kubectl set image
+          # A imagem será atualizada pela pipeline usando kubectl set image
+          # Coloque uma imagem inicial que funcione (ou será substituída)
+          image: renanmontanopaz/backend:latest # Exemplo, a pipeline vai mudar a tag
           ports:
             - containerPort: 8080
-          envFrom:
-            - configMapRef:
-                name: backend-config
+          # *** REMOVA A SEÇÃO envFrom QUE SE REFERE AO backend-config ***
+          # envFrom:
+          #   - configMapRef:
+          #       name: backend-config # REMOVA ESTA LINHA E SEUS PAIS
+
+          # *** ADICIONE/MANTENHA ESTAS VARIÁVEIS DE AMBIENTE PARA A CONEXÃO COM O BANCO ***
           env:
-            - name: POSTGRES_USER
+            # Variáveis padrão do PostgreSQL que o Prisma/sua aplicação podem usar
+            - name: PGUSER
               valueFrom:
                 secretKeyRef:
-                  name: postgres-secrets
-                  key: POSTGRES_USER
-            - name: POSTGRES_PASSWORD
+                  name: postgres-secrets # Nome do seu Secret
+                  key: POSTGRES_USER    # Chave dentro do Secret
+            - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: postgres-secrets
-                  key: POSTGRES_PASSWORD
-            - name: POSTGRES_DB
+                  name: postgres-secrets # Nome do seu Secret
+                  key: POSTGRES_PASSWORD # Chave dentro do Secret
+            - name: PGDATABASE
               valueFrom:
                 secretKeyRef:
-                  name: postgres-secrets
-                  key: POSTGRES_DB
+                  name: postgres-secrets # Nome do seu Secret
+                  key: POSTGRES_DB      # Chave dentro do Secret
+            - name: PGHOST
+              # Use o nome do Service do PostgreSQL como host
+              value: postgres-service
+            - name: PGPORT
+              # Use a porta padrão do PostgreSQL no Service
+              value: "5432" # Valor como string
+
+            # Se você tiver outras variáveis no backend-config ConfigMap que SÃO LITERIAIS
+            # (não usam $() para referenciar outras variáveis), você pode carregá-las
+            # individualmente aqui ou usar outro envFrom para um ConfigMap que *apenas*
+            # tenha essas variáveis literais.
+            # Exemplo para outras vars literais do antigo backend-config:
+            # - name: OUTRA_VAR
+            #   valueFrom:
+            #     configMapKeyRef:
+            #       name: backend-config # Referenciando o mesmo configmap se ele tiver outras chaves
+            #       key: OUTRA_CHAVE_LITERAL
+
+          limits:
+            ephemeral-storage:  1Gi
+            cpu: 500m # Considere definir limites de CPU e Memory
+            memory: 2Gi # Considere definir limites de CPU e Memory
+          requests:
+            cpu:                500m # Mantenha requests para escalonamento
+            ephemeral-storage:  1Gi
+            memory:             2Gi # Mantenha requests para escalonamento
+
+      # Volumes para o backend se houver
+      # volumes:
+      #   - name: my-backend-data
+      #     ...
