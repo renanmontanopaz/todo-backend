@@ -18,7 +18,7 @@ jobs:
         uses: google-github-actions/auth@v1
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-          project_id: ${{ secrets.PROJECT_ID }} # Adicionando o project_id aqui
+          project_id: ${{ secrets.PROJECT_ID }}
 
       - name: Set up GCloud CLI
         uses: google-github-actions/setup-gcloud@v1
@@ -28,6 +28,7 @@ jobs:
           gcloud components update --quiet
 
       - name: Configure Docker authentication (opcional - se usar Docker Hub)
+        if: ${{ secrets.DOCKER_USERNAME != '' && secrets.DOCKER_PASSWORD != '' }}
         run: |
           echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
@@ -45,8 +46,8 @@ jobs:
           # Define o nome da imagem no Artifact Registry
           IMAGE_NAME="us-central1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/backend-repo/backend:${VERSION}"
 
-          # Constrói a imagem Docker
-          docker build -t ${IMAGE_NAME} .
+          # Constrói a imagem Docker (ESPECIFICANDO O CONTEXTO DE BUILD)
+          docker build -t ${IMAGE_NAME} .  # O '.' especifica o diretório atual como o contexto
 
           # Envia a imagem para o Artifact Registry
           docker push ${IMAGE_NAME}
