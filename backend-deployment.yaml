@@ -23,22 +23,24 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: postgres-secrets # Nome do Secret que contém DATABASE_URL
-                  key: DATABASE_URL 
+                  key: DATABASE_URL
+            # Certifique-se que estes estão alinhados com o '- name: DATABASE_URL' acima
             - name: PGUSER
-               valueFrom:
-                 secretKeyRef:
-                   name: postgres-secrets
-                   key: POSTGRES_USER
-             - name: PGPASSWORD
-               valueFrom:
-                 secretKeyRef:
-                   name: postgres-secrets
-                   key: POSTGRES_PASSWORD
-             - name: PGDATABASE
-               valueFrom:
-                 secretKeyRef:
-                   name: postgres-secrets
-                   key: POSTGRES_DB
+              valueFrom: # <--- Alinhado com 'valueFrom' acima
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: POSTGRES_USER
+            - name: PGPASSWORD # <--- Alinhado com outros '- name:'
+              valueFrom: # <--- Alinhado com outros 'valueFrom:'
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: POSTGRES_PASSWORD
+            - name: PGDATABASE # <--- Alinhado com outros '- name:'
+              valueFrom: # <--- Alinhado com outros 'valueFrom:'
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: POSTGRES_DB
+          # Certifique-se que 'resources' está alinhado com 'env' e 'ports'
           resources:
             requests:
               memory: "512Mi"
