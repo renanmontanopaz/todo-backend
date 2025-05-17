@@ -12,37 +12,132 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v1
+        # Use v2 - geralmente mais recente e recomendado
+        uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
+          # scopes: 'cloud-platform' # Adicione escopos se necessário
 
       - name: Set up Google Cloud CLI
-        uses: google-github-actions/setup-gcloud@v1
+        # Use v2
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+           version: 'latest' # Garante a versão mais recente do gcloud
+           install_components: 'kubectl' # Instala o kubectl usando o gcloud components
 
-      - name: Configure gcloud and Install gke-gcloud-auth-plugin
+      - name: Configure gcloud and Kubectl
         run: |
+          # Configure o projeto
           gcloud config set project ${{ secrets.PROJECT_ID }}
-          gcloud config set compute/zone us-central1-a
-          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} --region us-central1
-          sudo apt-get update -y
-          sudo apt-get install -y kubectl
-          gcloud components install kubectl
-          gcloud components install gke-gcloud-auth-plugin
 
-      - name: Build and Push Docker Image
+          # Use 'zone' ou 'region' consistentemente com o seu cluster GKE.
+          # Se o cluster é zonal em us-central1-a, use zone.
+          gcloud config set compute/zone us-central1-a
+
+          # Obter credenciais do cluster GKE
+          # Use a flag --zone ou --region que corresponde ao seu cluster
+          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} --zone us-central1-a
+
+          # Verificar versões para depuração (Opcional)
+          echo "--- Versions ---"
+          gcloud --version
+          kubectl version --client
+          docker --version
+          echo "----------------"
+
+      - name: Build and Push Docker Image to Docker Hub # Nome do passo refletindo o destino
         run: |
-          DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }} # Define uma variável para facilitar a leitura
-          docker build -t $DOCKER_USERNAME/backend:latest -t $DOCKER_USERNAME/backend:${{ github.sha }} .
-          docker login -u "$DOCKER_USERNAME" -p ${{ secrets.DOCKER_PASSWORD }} # As aspas garantem que a variável seja expandida corretamente
-          docker push $DOCKER_USERNAME/backend:latest
-          docker push $DOCKER_USERNAME/backend:${{ github.sha }}
+          set -x # Ativar debug de comandos
+
+          DOCKER_USERNAME="${{ secrets.DOCKER_USERNAME }}" # As aspas garantem que a variável seja expandida corretamente
+
+          # Define a versão da imagem (usando o hash completo do commit)
+          IMAGE_TAG="${{ github.sha }}"
+
+          # Nome completo da imagem no Docker Hub
+          FULL_IMAGE_NAME="$DOCKER_USERNAME/backend" # Não inclua a tag aqui
+
+          # Nome da imagem com a tag SHA
+          IMAGE_WITH_SHA_TAG="${FULL_IMAGE_NAME}:${IMAGE_TAG}"
+          # Nome da imagem com a tag latest
+          IMAGE_WITH_LATEST_TAG="${FULL_IMAGE_NAME}:latest"
+
+
+          echo "Debug: Full Image Name: '${FULL_IMAGE_NAME}'"
+          echo "Debug: Image with SHA Tag: '${IMAGE_WITH_SHA_TAG}'"
+          echo "Debug: Image with Latest Tag: '${IMAGE_WITH_LATEST_TAG}'"
+
+          echo "Building image..."
+          # Build com a tag 'latest' localmente, que será usada para taguear as outras versões
+          docker build -t "${FULL_IMAGE_NAME}:latest" .
+
+          # Marca a imagem com a tag SHA
+          echo "Tagging image '${FULL_IMAGE_NAME}:latest' as '${IMAGE_WITH_SHA_TAG}'"
+          docker tag "${FULL_IMAGE_NAME}:latest" "${IMAGE_WITH_SHA_TAG}"
+
+          # Autentica com Docker Hub
+          echo "Logging in to Docker Hub..."
+          # Passa a senha via stdin para maior segurança (evita que a senha apareça em logs de comando com set -x)
+          echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u "$DOCKER_USERNAME" --password-stdin
+
+          # Envia as imagens
+          echo "Pushing image '${IMAGE_WITH_LATEST_TAG}'..."
+          docker push "${IMAGE_WITH_LATEST_TAG}"
+          echo "Pushing image '${IMAGE_WITH_SHA_TAG}'..."
+          docker push "${IMAGE_WITH_SHA_TAG}"
+
+          set +x # Desativar debug
 
       - name: Deploy to Kubernetes
         run: |
-          NAMESPACE=approval # Ou 'frontend'
-          DEPLOYMENT_FILE=backend-deployment.yaml # Ou 'backend-deployment.yaml'
-          sed -i "s|backend:latest|backend:latest|g" "$DEPLOYMENT_FILE"
+          set -x # Ativar debug de comandos
 
-          kubectl apply -f "$DEPLOYMENT_FILE" -n approval
-          kubectl apply -f backend-service.yaml -n approval # Adapte o nome do arquivo se necessário
-          kubectl apply -f configMap.yaml -n approval
+          # Use o namespace CONSISTENTE com seus arquivos YAML e cluster
+          NAMESPACE=approval
+
+          # Caminhos dos arquivos de configuração
+          DEPLOYMENT_FILE=backend-deployment.yaml
+          SERVICE_FILE=backend-service.yaml
+          CONFIGMAP_FILE=configMap.yaml # Nome correto do arquivo ConfigMap
+
+          # Nome completo da imagem construída com a tag SHA
+          DOCKER_USERNAME="${{ secrets.DOCKER_USERNAME }}"
+          IMAGE_WITH_SHA_TAG="$DOCKER_USERNAME/backend:${{ github.sha }}"
+
+          # Nome do deployment e container, DO SEU YAML
+          # No seu backend-deployment.yaml, o nome do Deployment é 'backend-deployment'
+          DEPLOYMENT_NAME="backend-deployment"
+          # No seu backend-deployment.yaml, o nome do Container é 'backend'
+          CONTAINER_NAME="backend"
+
+
+          echo "Deploying image ${IMAGE_WITH_SHA_TAG} to namespace ${NAMESPACE}"
+
+          # Aplica o Service
+          echo "Applying Service from ${SERVICE_FILE}..."
+          kubectl apply -f "${SERVICE_FILE}" -n "${NAMESPACE}"
+
+          # Aplica o ConfigMap (Isso resolve o erro 'configmap not found')
+          echo "Applying ConfigMap from ${CONFIGMAP_FILE}..."
+          kubectl apply -f "${CONFIGMAP_FILE}" -n "${NAMESPACE}"
+
+          # Aplica o Deployment (cria se não existir, ou atualiza a definição geral se mudar algo no YAML)
+          echo "Applying Deployment from ${DEPLOYMENT_FILE}..."
+          kubectl apply -f "${DEPLOYMENT_FILE}" -n "${NAMESPACE}"
+
+          # Aguardar um pouco para o Deployment ser criado/atualizado antes de tentar setar a imagem
+          # Isso é útil especialmente na primeira execução onde o objeto Deployment está sendo criado
+          sleep 10 # Ajuste o tempo se necessário
+
+          # *** CORREÇÃO PRINCIPAL ***
+          # Atualiza a imagem do container 'backend' dentro do deployment 'backend-deployment'
+          echo "Updating image for deployment '${DEPLOYMENT_NAME}', container '${CONTAINER_NAME}' to '${IMAGE_WITH_SHA_TAG}'"
+          kubectl set image deployment/"${DEPLOYMENT_NAME}" "${CONTAINER_NAME}"="${IMAGE_WITH_SHA_TAG}" -n "${NAMESPACE}"
+          echo "Image update command issued."
+
+          # Aguardar o rollout para verificar se a atualização da imagem foi bem sucedida
+          echo "Waiting for rollout of deployment '${DEPLOYMENT_NAME}' to complete..."
+          kubectl rollout status deployment/"${DEPLOYMENT_NAME}" -n "${NAMESPACE}" --timeout=5m # Ajuste o timeout se necessário
+          echo "Rollout status checked."
+
+          set +x # Desativar debug
