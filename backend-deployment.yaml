@@ -24,11 +24,10 @@ spec:
                 secretKeyRef:
                   name: postgres-secrets # Nome do Secret que contém DATABASE_URL
                   key: DATABASE_URL
-            # Certifique-se que estes estão alinhados com o '- name: DATABASE_URL' acima
             - name: PGUSER
-                value: postgres
+              value: postgres
             - name: PGPASSWORD # <--- Alinhado com outros '- name:'
-                value: "5235"
+              value: "5235"
             - name: PGDATABASE # <--- Alinhado com outros '- name:'
               value: postgres
           # Certifique-se que 'resources' está alinhado com 'env' e 'ports'
