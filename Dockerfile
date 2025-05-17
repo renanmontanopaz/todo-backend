@@ -1,4 +1,4 @@
-FROM node:18-alpine AS builder # Usando Node 18 Alpine
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
@@ -18,7 +18,7 @@ COPY . .
 RUN npm run build
 
 # --- Estágio Final ---
-FROM node:18-alpine # Usando Node 18 Alpine
+FROM node:18-alpine
 
 WORKDIR /app
 
