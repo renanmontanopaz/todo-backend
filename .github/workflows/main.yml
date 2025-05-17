@@ -52,10 +52,10 @@ jobs:
           export DOCKER_BUILDKIT=0
 
           # Constrói a imagem Docker (ESPECIFICANDO O CONTEXTO DE BUILD E O DIRETÓRIO DE TRABALHO)
-          docker build -t ${IMAGE_NAME} --no-cache .
+          docker build -t "${IMAGE_NAME}" --no-cache .
 
           # Envia a imagem para o Artifact Registry
-          docker push ${IMAGE_NAME}
+          docker push "${IMAGE_NAME}"
 
           # Define a variável de ambiente IMAGE_NAME para uso posterior
           echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_ENV
