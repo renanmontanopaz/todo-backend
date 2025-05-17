@@ -1,144 +1,118 @@
-name: CI/CD
+name: Deploy to GKE
 
 on:
   push:
-    branches: [ main ]
+    branches: [ develop ]
+  pull_request:
+    branches: [ develop ]
+
+env:
+  PROJECT_ID: ${{ secrets.PROJECT_ID }}
+  GKE_CLUSTER: ${{ secrets.GKE_CLUSTER }}
+  GKE_ZONE: ${{ secrets.GKE_ZONE }}
+  DEPLOYMENT_NAME: api-deployment
+  IMAGE: api-nestjs
 
 jobs:
-  build-and-deploy:
+  setup-build-publish-deploy:
+    name: Setup, Build, Publish, and Deploy
     runs-on: ubuntu-latest
+    environment: production
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v3
 
-      - name: Authenticate to Google Cloud
-        # Use v2 - geralmente mais recente e recomendado
-        uses: google-github-actions/auth@v2
+      # Configuração do Docker
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      # Login no Docker Hub
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-          # scopes: 'cloud-platform' # Adicione escopos se necessário para a Service Account
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Set up Google Cloud CLI
-        # Use v2
-        uses: google-github-actions/setup-gcloud@v2
+      # Build e push da imagem Docker
+      - name: Build and push
+        uses: docker/build-push-action@v4
         with:
-           version: 'latest' # Garante a versão mais recente do gcloud
-           # Remove 'kubectl' daqui se for instalar via apt-get/componentes manualmente
-           install_components: 'kubectl' # Instala o kubectl usando o gcloud components
+          context: .
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/api-nestjs:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Configure gcloud and Kubectl
+      # Configuração do Google Cloud SDK
+      - name: Setup Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.PROJECT_ID }}
+
+      # Configuração do kubectl
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v1
+        with:
+          cluster_name: ${{ secrets.GKE_CLUSTER }}
+          location: ${{ secrets.GKE_ZONE }}
+
+      # Criação dos arquivos de deploy
+      - name: Create API deployment file
         run: |
-          # Configure o projeto
-          gcloud config set project ${{ secrets.PROJECT_ID }}
+          cat <<EOF > api-deployment.yaml
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: api-deployment
+            namespace: approval
+            labels:
+              app: api
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: api
+            template:
+              metadata:
+                labels:
+                  app: api
+              spec:
+                containers:
+                  - name: api
+                    image: ${{ secrets.DOCKER_USERNAME }}/api-nestjs:${{ github.sha }}
+                    ports:
+                      - containerPort: 8080
+                    env:
+                      - name: DATABASE_URL
+                        value: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-service:5432/$(POSTGRES_DB)?schema=public
+                    envFrom:
+                      - secretRef:
+                          name: postgres-secrets
+          EOF
 
-          # *** CORREÇÃO AQUI: Use REGION us-central1 ***
-          gcloud config set compute/region us-central1
-
-          # *** CORREÇÃO AQUI: Use --region us-central1 ***
-          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} --region us-central1
-
-          # Se você usa `install_components: 'kubectl'` no step anterior, as linhas abaixo são redundantes:
-          # sudo apt-get update -y
-          # sudo apt-get install -y kubectl
-          # gcloud components install kubectl # Já incluído no setup-gcloud@v2
-
-          # Se necessário, instale o plugin de autenticação GKE se o step anterior não o fizer automaticamente:
-          # gcloud components install gke-gcloud-auth-plugin --quiet
-
-          # Verificar versões para depuração (Opcional)
-          echo "--- Versions ---"
-          gcloud --version
-          kubectl version --client
-          docker --version
-          echo "----------------"
-
-
-      - name: Build and Push Docker Image to Docker Hub
+      - name: Create API service file
         run: |
-          set -x # Ativar debug de comandos
+          cat <<EOF > api-service.yaml
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: api-service
+            namespace: approval
+          spec:
+            selector:
+              app: api
+            ports:
+              - protocol: TCP
+                port: 80
+                targetPort: 8080
+            type: ClusterIP
+          EOF
 
-          DOCKER_USERNAME="${{ secrets.DOCKER_USERNAME }}"
-
-          # Define a versão da imagem (usando o hash completo do commit)
-          IMAGE_TAG="${{ github.sha }}"
-
-          # Nome completo da imagem no Docker Hub
-          FULL_IMAGE_NAME="$DOCKER_USERNAME/backend" # Não inclua a tag aqui
-
-          # Nome da imagem com a tag SHA
-          IMAGE_WITH_SHA_TAG="${FULL_IMAGE_NAME}:${IMAGE_TAG}"
-          # Nome da imagem com a tag latest
-          IMAGE_WITH_LATEST_TAG="${FULL_IMAGE_NAME}:latest"
-
-
-          echo "Debug: Full Image Name: '${FULL_IMAGE_NAME}'"
-          echo "Debug: Image with SHA Tag: '${IMAGE_WITH_SHA_TAG}'"
-          echo "Debug: Image with Latest Tag: '${IMAGE_WITH_LATEST_TAG}'"
-
-          echo "Building image..."
-          # Build com a tag 'latest' localmente, que será usada para taguear as outras versões
-          docker build -t "${FULL_IMAGE_NAME}:latest" .
-
-          # Marca a imagem com a tag SHA
-          echo "Tagging image '${FULL_IMAGE_NAME}:latest' as '${IMAGE_WITH_SHA_TAG}'"
-          docker tag "${FULL_IMAGE_NAME}:latest" "${IMAGE_WITH_SHA_TAG}"
-
-          # Autentica com Docker Hub
-          echo "Logging in to Docker Hub..."
-          echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u "$DOCKER_USERNAME" --password-stdin
-
-          # Envia as imagens
-          echo "Pushing image '${IMAGE_WITH_LATEST_TAG}'..."
-          docker push "${IMAGE_WITH_LATEST_TAG}"
-          echo "Pushing image '${IMAGE_WITH_SHA_TAG}'..."
-          docker push "${IMAGE_WITH_SHA_TAG}"
-
-          set +x # Desativar debug
-
-      - name: Deploy to Kubernetes
+      # Deploy no Kubernetes
+      - name: Deploy to GKE
         run: |
-          set -x # Ativar debug de comandos
-
-          # Use o namespace CONSISTENTE com seus arquivos YAML e cluster
-          NAMESPACE=approval
-
-          # Caminhos dos arquivos de configuração (ajuste se estiverem em subpastas como k8s/)
-          DEPLOYMENT_FILE=backend-deployment.yaml
-          SERVICE_FILE=backend-service.yaml
-
-          # Nome completo da imagem construída com a tag SHA
-          DOCKER_USERNAME="${{ secrets.DOCKER_USERNAME }}"
-          IMAGE_WITH_SHA_TAG="$DOCKER_USERNAME/backend:${{ github.sha }}"
-
-          # Nome do deployment e container, DO SEU YAML (confirmados anteriormente)
-          DEPLOYMENT_NAME="backend-deployment"
-          CONTAINER_NAME="backend"
-          kubectl apply -f postgres-secrets.yaml -n "${NAMESPACE}"
-          kubectl apply -f postgres-service.yaml -n "${NAMESPACE}"
-          kubectl apply -f postgres-deployment.yaml -n "${NAMESPACE}"
-
-          echo "Debug: Image Name for Deployment: '${IMAGE_WITH_SHA_TAG}'"
-          echo "Deploying image ${IMAGE_WITH_SHA_TAG} to namespace ${NAMESPACE}"
-
-          # Aplica o Service
-          echo "Applying Service from ${SERVICE_FILE}..."
-          kubectl apply -f "${SERVICE_FILE}" -n "${NAMESPACE}"
-
-          # Aplica o Deployment (cria se não existir, ou atualiza a definição geral se mudar algo no YAML)
-          echo "Applying Deployment from ${DEPLOYMENT_FILE}..."
-          kubectl apply -f "${DEPLOYMENT_FILE}" -n "${NAMESPACE}"
-
-          # Aguardar um pouco para o Deployment ser criado/atualizado antes de tentar setar a imagem
-          sleep 10
-
-          # Atualiza a imagem do container 'backend' dentro do deployment 'backend-deployment'
-          echo "Updating image for deployment '${DEPLOYMENT_NAME}', container '${CONTAINER_NAME}' to '${IMAGE_WITH_SHA_TAG}'"
-          kubectl set image deployment/"${DEPLOYMENT_NAME}" "${CONTAINER_NAME}"="${IMAGE_WITH_SHA_TAG}" -n "${NAMESPACE}"
-          echo "Image update command issued."
-
-          # Aguardar o rollout para verificar se a atualização da imagem foi bem sucedida
-          echo "Waiting for rollout of deployment '${DEPLOYMENT_NAME}' to complete..."
-          kubectl rollout status deployment/"${DEPLOYMENT_NAME}" -n "${NAMESPACE}" --timeout=5m
-          echo "Rollout status checked."
-
-          set +x # Desativar debug
+          kubectl apply -f api-deployment.yaml
+          kubectl apply -f api-service.yaml
+          kubectl rollout restart deployment api-deployment -n approval
