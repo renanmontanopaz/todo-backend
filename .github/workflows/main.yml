@@ -12,21 +12,38 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v1
+        # Usa a versão mais recente recomendada se não houver razão para usar v1 específica
+        uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
+          # Adicione escopos necessários, se aplicável. storage-full é comum para artefatos.
+          # scopes: 'cloud-platform'
 
       - name: Set up Google Cloud CLI
-        uses: google-github-actions/setup-gcloud@v1
+        # Usa a versão mais recente recomendada se não houver razão para usar v1 específica
+        uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure gcloud and Install kubectl
+      - name: Configure gcloud and Kubectl
         run: |
           gcloud config set project ${{ secrets.PROJECT_ID }}
-          gcloud config set compute/zone ${{ secrets.GKE_ZONE }}
+          # Se o seu GKE é regional, use region. Se for zonal, use zone.
+          # Verifique a configuração do seu cluster GKE.
+          # Vou assumir regional us-central1 como você usou no get-credentials
+          gcloud config set compute/region us-central1
+          
+          # Obter credenciais do cluster GKE
+          # Certifique-se que o nome do cluster e a região/zona estão corretos
           gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} --region us-central1
-          sudo apt-get update -y
-          sudo apt-get install -y kubectl
-          gcloud components install kubectl
+
+          # Instalar kubectl usando gcloud components (método preferencial)
+          # Já está presente no seu workflow, remova a instalação via apt se a usar
+          gcloud components install kubectl --quiet
+
+          # Opcional: Verificar versões para depuração
+          kubectl version --client
+          gcloud --version
+          docker --version
+
 
       - name: Build and Push Docker Image to Artifact Registry
         run: |
@@ -34,25 +51,31 @@ jobs:
           VERSION=$(echo "$GITHUB_SHA" | cut -c1-7)
 
           # Define o nome base da imagem no Artifact Registry
-          IMAGE_BASE="us-central1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/backend-repo/backend"
+          # Formato: LOCATION-docker.pkg.dev/PROJECT_ID/REPOSITORY/IMAGE_NAME
+          IMAGE_REPO="us-central1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/backend-repo/backend" # Use backend-repo ou o nome correto do seu repo no AR
 
           # Define o nome completo da imagem com a tag
-          IMAGE_NAME="${IMAGE_BASE}:${VERSION}"
+          IMAGE_NAME="${IMAGE_REPO}:${VERSION}"
 
-          # Remove caracteres invisíveis da variável IMAGE_NAME
-          IMAGE_NAME=$(echo "${IMAGE_NAME}" | tr -d '[:cntrl:]')
+          echo "Building and pushing image: ${IMAGE_NAME}"
 
           # Autentica com o Artifact Registry (usando gcloud)
-          gcloud auth configure-docker us-central1-docker.pkg.dev
+          # Esta etapa configura o docker CLI para usar gcloud como credencial helper
+          gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
-          # Constrói a imagem
-          docker build -t "${IMAGE_BASE}" .
+          # *** CORREÇÃO AQUI ***
+          # 1. Constrói a imagem com uma tag local temporária
+          docker build -t backend-image .
 
-          # Marca a imagem com a tag
-          docker tag "${IMAGE_BASE}" "${IMAGE_NAME}"
+          # 2. Marca a imagem local com a tag completa do Artifact Registry
+          docker tag backend-image "${IMAGE_NAME}"
 
-          # Envia a imagem
+          # 3. Envia a imagem para o Artifact Registry
           docker push "${IMAGE_NAME}"
+
+          # Adiciona o IMAGE_NAME ao output para ser usado em steps futuras (opcional)
+          # echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_ENV
+
 
       - name: Deploy to Kubernetes
         run: |
@@ -60,9 +83,53 @@ jobs:
           DEPLOYMENT_FILE=k8s/backend-deployment.yaml  # Arquivo de deployment do backend
           SERVICE_FILE=k8s/backend-service.yaml # Arquivo de service do backend
 
-          # Substitui o placeholder da imagem no arquivo de deployment
-          sed -i "s|IMAGE_PLACEHOLDER|${IMAGE_NAME}|g" "${DEPLOYMENT_FILE}"
+          # Reobtém o nome da imagem caso não tenha usado GITHUB_ENV (alternativa)
+          VERSION=$(echo "$GITHUB_SHA" | cut -c1-7)
+          IMAGE_REPO="us-central1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/backend-repo/backend" # Use o mesmo nome do step anterior
+          IMAGE_NAME="${IMAGE_REPO}:${VERSION}"
 
-          # Aplica as configurações no Kubernetes
-          kubectl apply -f "${DEPLOYMENT_FILE}" -n "${NAMESPACE}"
+          echo "Deploying image ${IMAGE_NAME} to namespace ${NAMESPACE}"
+
+          # *** CORREÇÃO/MELHORIA AQUI ***
+          # Em vez de usar sed para substituir um placeholder, use kubectl set image
+          # que é o método padrão para atualizar a imagem em um deployment existente.
+          # Isso evita modificar arquivos no workspace e é mais robusto.
+          # Supondo que o seu deployment container se chama 'backend-container'
+          # Substitua 'backend-container' pelo nome real do container no seu deployment.yaml
+
+          # Aplica o service primeiro (geralmente mais estável, mas a ordem não crítica aqui)
           kubectl apply -f "${SERVICE_FILE}" -n "${NAMESPACE}"
+
+          # Verifica se o deployment existe antes de tentar setar a imagem
+          # Se não existir, aplica o deployment primeiro.
+          # Se existir, atualiza a imagem.
+          kubectl get deployment backend -n "${NAMESPACE}" > /dev/null 2>&1
+          if [ $? -ne 0 ]; then
+            echo "Deployment 'backend' not found in namespace ${NAMESPACE}. Applying deployment..."
+             # Se você usa um placeholder no deployment.yaml, você precisará do sed AQUI para a primeira aplicação
+             # Ou modifique o deployment.yaml para não ter placeholder e use set image sempre
+             # Opção A: Se o deployment.yaml não tiver placeholder e você sempre usar set image:
+             # kubectl apply -f "${DEPLOYMENT_FILE}" -n "${NAMESPACE}"
+             # Opção B: Se o deployment.yaml TIVER placeholder e você aplicar pela primeira vez:
+             # Este sed DEVE ser usado apenas na primeira aplicação ou se você for aplicar o arquivo modificado
+             # sed "s|IMAGE_PLACEHOLDER|${IMAGE_NAME}|g" "${DEPLOYMENT_FILE}" | kubectl apply -f - -n "${NAMESPACE}"
+             # Recomendo fortemente a Opção A ou usar apenas `kubectl set image` se o deployment já existir.
+
+             # *** Usando kubectl set image como método principal para atualização ***
+             # Assumindo que o deployment.yaml NÃO tem um placeholder e que você irá criar ele manualmente uma vez ou via IaC
+             # OU que a primeira aplicação usou um método diferente.
+             # Se o deployment não existe, esta pipeline só deveria atualizá-lo, não criá-lo do zero
+             # usando um arquivo com placeholder.
+             # Vamos manter a lógica de set image para o fluxo de atualização.
+             echo "Deployment 'backend' not found. Please ensure it exists before running updates via this pipeline."
+             exit 1 # Saia se o deployment não existe e a pipeline é apenas para atualização
+          else
+            echo "Deployment 'backend' found. Updating image..."
+            # Atualiza a imagem do container 'backend-container' no deployment 'backend'
+            kubectl set image deployment/backend backend-container="${IMAGE_NAME}" -n "${NAMESPACE}"
+            echo "Image updated to ${IMAGE_NAME}"
+          fi
+
+          # Aguardar o rollout (opcional, mas recomendado para saber se foi bem-sucedido)
+          echo "Waiting for rollout to complete..."
+          kubectl rollout status deployment/backend -n "${NAMESPACE}" --timeout=5m
