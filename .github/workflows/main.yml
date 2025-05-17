@@ -113,7 +113,9 @@ jobs:
           # Nome do deployment e container, DO SEU YAML (confirmados anteriormente)
           DEPLOYMENT_NAME="backend-deployment"
           CONTAINER_NAME="backend"
-
+          kubectl apply -f postgres-secrets.yaml -n "${NAMESPACE}"
+          kubectl apply -f postgres-service.yaml -n "${NAMESPACE}"
+          kubectl apply -f postgres-deployment.yaml -n "${NAMESPACE}"
 
           echo "Debug: Image Name for Deployment: '${IMAGE_WITH_SHA_TAG}'"
           echo "Deploying image ${IMAGE_WITH_SHA_TAG} to namespace ${NAMESPACE}"
