@@ -45,8 +45,11 @@ jobs:
           # Define o nome da imagem no Artifact Registry
           IMAGE_NAME="us-central1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/backend-repo/backend:${VERSION}"
 
-          # Constrói a imagem Docker (ESPECIFICANDO O CONTEXTO DE BUILD)
-          docker build -t ${IMAGE_NAME} .  # O '.' especifica o diretório atual como o contexto
+          # Desabilita o Docker Buildx e o cache do Docker
+          export DOCKER_BUILDKIT=0
+          
+          # Constrói a imagem Docker (ESPECIFICANDO O CONTEXTO DE BUILD E O DIRETÓRIO DE TRABALHO)
+          docker build -t ${IMAGE_NAME} --no-cache .
 
           # Envia a imagem para o Artifact Registry
           docker push ${IMAGE_NAME}
