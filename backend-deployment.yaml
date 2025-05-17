@@ -19,12 +19,26 @@ spec:
           ports:
             - containerPort: 8080 # Porta da sua API Spring Boot
           env:
-            - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://postgres-service.production:5432/postgres # URL do banco de dados
-            - name: SPRING_DATASOURCE_USERNAME
-              value: postgres
-            - name: SPRING_DATASOURCE_PASSWORD
-              value: "5235"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets # Nome do Secret que contém DATABASE_URL
+                  key: DATABASE_URL 
+            - name: PGUSER
+               valueFrom:
+                 secretKeyRef:
+                   name: postgres-secrets
+                   key: POSTGRES_USER
+             - name: PGPASSWORD
+               valueFrom:
+                 secretKeyRef:
+                   name: postgres-secrets
+                   key: POSTGRES_PASSWORD
+             - name: PGDATABASE
+               valueFrom:
+                 secretKeyRef:
+                   name: postgres-secrets
+                   key: POSTGRES_DB
           resources:
             requests:
               memory: "512Mi"
