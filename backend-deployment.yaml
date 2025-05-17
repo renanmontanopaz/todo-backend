@@ -26,20 +26,11 @@ spec:
                   key: DATABASE_URL
             # Certifique-se que estes estão alinhados com o '- name: DATABASE_URL' acima
             - name: PGUSER
-              valueFrom: # <--- Alinhado com 'valueFrom' acima
-                secretKeyRef:
-                  name: postgres-secrets
-                  key: POSTGRES_USER
+                value: postgres
             - name: PGPASSWORD # <--- Alinhado com outros '- name:'
-              valueFrom: # <--- Alinhado com outros 'valueFrom:'
-                secretKeyRef:
-                  name: postgres-secrets
-                  key: POSTGRES_PASSWORD
+                value: "5235"
             - name: PGDATABASE # <--- Alinhado com outros '- name:'
-              valueFrom: # <--- Alinhado com outros 'valueFrom:'
-                secretKeyRef:
-                  name: postgres-secrets
-                  key: POSTGRES_DB
+              value: postgres
           # Certifique-se que 'resources' está alinhado com 'env' e 'ports'
           resources:
             requests:
