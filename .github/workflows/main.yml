@@ -41,7 +41,7 @@ jobs:
         run: |
           NAMESPACE=approval # Ou 'frontend'
           DEPLOYMENT_FILE=backend-deployment.yaml # Ou 'backend-deployment.yaml'
-          sed -i "s|backend:latest|${{ secrets.DOCKER_USERNAME }}/backend:latest|g" "$DEPLOYMENT_FILE"
+          sed -i "s|backend:latest|backend:latest|g" "$DEPLOYMENT_FILE"
 
           kubectl apply -f "$DEPLOYMENT_FILE" -n approval
           kubectl apply -f backend-service.yaml -n approval # Adapte o nome do arquivo se necessário
