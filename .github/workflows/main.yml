@@ -1,71 +1,57 @@
-name: Deploy Backend to GKE
+name: CI/CD Backend
 
 on:
   push:
-    branches:
-      - main  # ou sua branch principal
+    branches: [ main ]
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    environment: production
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v1
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-          project_id: ${{ secrets.PROJECT_ID }}
 
-      - name: Set up GCloud CLI
+      - name: Set up Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v1
 
-      - name: Update gcloud CLI
+      - name: Configure gcloud and Install kubectl
         run: |
-          gcloud components update --quiet
-
-      - name: Configure Docker authentication (opcional - se usar Docker Hub)
-        run: |
-          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-
-      - name: Build and push Docker image to Artifact Registry
-        run: |
-          # Configura o projeto gcloud
           gcloud config set project ${{ secrets.PROJECT_ID }}
+          gcloud config set compute/zone ${{ secrets.GKE_ZONE }}
+          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} --region ${{ secrets.GKE_ZONE }}
+          sudo apt-get update -y
+          sudo apt-get install -y kubectl
+          gcloud components install kubectl
 
-          # Autentica com o Artifact Registry
-          gcloud auth configure-docker us-central1-docker.pkg.dev
-
-          # Adiciona o docker login explícito
-          docker login -u oauth2accesstoken -p "$(gcloud auth print-access-token)" us-central1-docker.pkg.dev
-
+      - name: Build and Push Docker Image to Artifact Registry
+        run: |
           # Define a versão da imagem (usando os 7 primeiros caracteres do hash do commit)
           VERSION=$(echo "$GITHUB_SHA" | cut -c1-7)
-
+          
           # Define o nome da imagem no Artifact Registry
           IMAGE_NAME="us-central1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/backend-repo/backend:${VERSION}"
-
-          # Desabilita o Docker Buildx e o cache do Docker
-          export DOCKER_BUILDKIT=0
-
-          # Constrói a imagem Docker (ESPECIFICANDO O CONTEXTO DE BUILD E O DIRETÓRIO DE TRABALHO)
-          docker build -t "${IMAGE_NAME}" --no-cache .
-
-          # Envia a imagem para o Artifact Registry
+          
+          # Autentica com o Artifact Registry (usando gcloud)
+          gcloud auth configure-docker us-central1-docker.pkg.dev
+          
+          # Constrói e envia a imagem
+          docker build -t "${IMAGE_NAME}" .
           docker push "${IMAGE_NAME}"
 
-          # Define a variável de ambiente IMAGE_NAME para uso posterior
-          echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_ENV
-
-      - name: Get GKE credentials
+      - name: Deploy to Kubernetes
         run: |
-          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} --zone ${{ secrets.GKE_ZONE }} --project ${{ secrets.PROJECT_ID }}
-
-      - name: Apply Kubernetes manifests
-        run: |
-          sed -i "s|IMAGE_PLACEHOLDER|${{ env.IMAGE_NAME }}|g" k8s/backend-deployment.yaml
-          kubectl apply -f k8s/backend-deployment.yaml -n production
-          kubectl apply -f k8s/backend-service.yaml -n production
+          NAMESPACE=production # Ou 'approval'
+          DEPLOYMENT_FILE=k8s/backend-deployment.yaml  # Arquivo de deployment do backend
+          SERVICE_FILE=k8s/backend-service.yaml # Arquivo de service do backend
+          
+          # Substitui o placeholder da imagem no arquivo de deployment
+          sed -i "s|IMAGE_PLACEHOLDER|${IMAGE_NAME}|g" "${DEPLOYMENT_FILE}"
+          
+          # Aplica as configurações no Kubernetes
+          kubectl apply -f "${DEPLOYMENT_FILE}" -n "${NAMESPACE}"
+          kubectl apply -f "${SERVICE_FILE}" -n "${NAMESPACE}"
