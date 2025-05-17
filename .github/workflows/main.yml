@@ -32,15 +32,26 @@ jobs:
         run: |
           # Define a versão da imagem (usando os 7 primeiros caracteres do hash do commit)
           VERSION=$(echo "$GITHUB_SHA" | cut -c1-7)
-          
-          # Define o nome da imagem no Artifact Registry
-          IMAGE_NAME="us-central1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/backend-repo/backend:${VERSION}"
-          
+
+          # Define o nome base da imagem no Artifact Registry
+          IMAGE_BASE="us-central1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/backend-repo/backend"
+
+          # Define o nome completo da imagem com a tag
+          IMAGE_NAME="${IMAGE_BASE}:${VERSION}"
+
+          # Remove caracteres invisíveis da variável IMAGE_NAME
+          IMAGE_NAME=$(echo "${IMAGE_NAME}" | tr -d '[:cntrl:]')
+
           # Autentica com o Artifact Registry (usando gcloud)
           gcloud auth configure-docker us-central1-docker.pkg.dev
-          
-          # Constrói e envia a imagem
-          docker build -t "${IMAGE_NAME}" .
+
+          # Constrói a imagem
+          docker build -t "${IMAGE_BASE}" .
+
+          # Marca a imagem com a tag
+          docker tag "${IMAGE_BASE}" "${IMAGE_NAME}"
+
+          # Envia a imagem
           docker push "${IMAGE_NAME}"
 
       - name: Deploy to Kubernetes
@@ -48,10 +59,10 @@ jobs:
           NAMESPACE=production # Ou 'approval'
           DEPLOYMENT_FILE=k8s/backend-deployment.yaml  # Arquivo de deployment do backend
           SERVICE_FILE=k8s/backend-service.yaml # Arquivo de service do backend
-          
+
           # Substitui o placeholder da imagem no arquivo de deployment
           sed -i "s|IMAGE_PLACEHOLDER|${IMAGE_NAME}|g" "${DEPLOYMENT_FILE}"
-          
+
           # Aplica as configurações no Kubernetes
           kubectl apply -f "${DEPLOYMENT_FILE}" -n "${NAMESPACE}"
           kubectl apply -f "${SERVICE_FILE}" -n "${NAMESPACE}"
