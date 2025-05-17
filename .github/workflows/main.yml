@@ -34,7 +34,7 @@ jobs:
       - name: Build and push Docker image to Artifact Registry
         run: |
           gcloud config set project ${{ secrets.PROJECT_ID }}
-          gcloud artifacts repositories create backend-repo --repository-format=docker --location=us-central1 --description="Docker repository for backend images" --if-not-exists
+          gcloud artifacts repositories create backend-repo --repository-format=docker --location=us-central1 --description="Docker repository for backend images"
           VERSION=$(echo "$GITHUB_SHA" | cut -c1-7)
           IMAGE_NAME="us-central1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/backend-repo/backend:${VERSION}"
           docker build -t ${IMAGE_NAME} .
