@@ -123,10 +123,6 @@ jobs:
           echo "Applying Service from ${SERVICE_FILE}..."
           kubectl apply -f "${SERVICE_FILE}" -n "${NAMESPACE}"
 
-          # Aplica o ConfigMap (Isso resolve o erro 'configmap not found')
-          echo "Applying ConfigMap from ${CONFIGMAP_FILE}..."
-          kubectl apply -f "${CONFIGMAP_FILE}" -n "${NAMESPACE}"
-
           # Aplica o Deployment (cria se não existir, ou atualiza a definição geral se mudar algo no YAML)
           echo "Applying Deployment from ${DEPLOYMENT_FILE}..."
           kubectl apply -f "${DEPLOYMENT_FILE}" -n "${NAMESPACE}"
