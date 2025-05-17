@@ -39,6 +39,9 @@ jobs:
           # Autentica com o Artifact Registry
           gcloud auth configure-docker us-central1-docker.pkg.dev
 
+          # Adiciona o docker login explícito
+          docker login -u oauth2accesstoken -p "$(gcloud auth print-access-token)" us-central1-docker.pkg.dev
+
           # Define a versão da imagem (usando os 7 primeiros caracteres do hash do commit)
           VERSION=$(echo "$GITHUB_SHA" | cut -c1-7)
 
@@ -47,7 +50,7 @@ jobs:
 
           # Desabilita o Docker Buildx e o cache do Docker
           export DOCKER_BUILDKIT=0
-          
+
           # Constrói a imagem Docker (ESPECIFICANDO O CONTEXTO DE BUILD E O DIRETÓRIO DE TRABALHO)
           docker build -t ${IMAGE_NAME} --no-cache .
 
