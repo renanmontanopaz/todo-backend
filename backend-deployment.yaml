@@ -2,11 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backend-deployment
-  namespace: approval # ou approval
-  labels:
-    app: backend
+  namespace: approval # Garante que o deployment seja criado no namespace correto
 spec:
-  replicas: 1
+  replicas: 1 # Ajuste conforme necessário
   selector:
     matchLabels:
       app: backend
@@ -17,25 +15,26 @@ spec:
     spec:
       containers:
         - name: backend
-          image: seu-usuario/backend:latest
+          image: backend:latest # Substituirá pela tag correta na pipeline
           ports:
-            - containerPort: 8080
-          envFrom:
-            - configMapRef:
-                name: backend-config
+            - containerPort: 8080 # Porta da sua API Spring Boot
           env:
-            - name: POSTGRES_USER
+            - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: postgres-secrets
-                  key: POSTGRES_USER
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-secrets
-                  key: POSTGRES_PASSWORD
-            - name: POSTGRES_DB
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-secrets
-                  key: POSTGRES_DB
+                  name: postgres-secrets # Nome do Secret que contém DATABASE_URL
+                  key: DATABASE_URL
+            - name: PGUSER
+              value: postgres
+            - name: PGPASSWORD # <--- Alinhado com outros '- name:'
+              value: "5235"
+            - name: PGDATABASE # <--- Alinhado com outros '- name:'
+              value: postgres
+          # Certifique-se que 'resources' está alinhado com 'env' e 'ports'
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
