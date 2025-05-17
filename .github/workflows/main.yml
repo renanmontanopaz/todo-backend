@@ -45,3 +45,4 @@ jobs:
 
           kubectl apply -f "$DEPLOYMENT_FILE" -n approval
           kubectl apply -f backend-service.yaml -n approval # Adapte o nome do arquivo se necessário
+          kubectl apply -f configMap.yaml -n approval
