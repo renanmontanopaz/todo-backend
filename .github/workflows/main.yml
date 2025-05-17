@@ -105,7 +105,6 @@ jobs:
           # Caminhos dos arquivos de configuração (ajuste se estiverem em subpastas como k8s/)
           DEPLOYMENT_FILE=backend-deployment.yaml
           SERVICE_FILE=backend-service.yaml
-          CONFIGMAP_FILE=configMap.yaml
 
           # Nome completo da imagem construída com a tag SHA
           DOCKER_USERNAME="${{ secrets.DOCKER_USERNAME }}"
