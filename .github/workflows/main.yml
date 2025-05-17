@@ -22,6 +22,11 @@ jobs:
       - name: Set up GCloud CLI
         uses: google-github-actions/setup-gcloud@v1
 
+      # Adicionando a etapa para atualizar a gcloud CLI
+      - name: Update gcloud CLI
+        run: |
+          gcloud components update --quiet
+
       - name: Configure Docker authentication (opcional - se usar Docker Hub)
         run: |
           echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
