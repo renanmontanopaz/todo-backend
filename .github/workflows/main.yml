@@ -2,9 +2,9 @@ name: Deploy to GKE
 
 on:
   push:
-    branches: [ develop ]
+    branches: [ develop, main ]
   pull_request:
-    branches: [ develop ]
+    branches: [ develop, main ]
 
 env:
   PROJECT_ID: ${{ secrets.PROJECT_ID }}
@@ -71,7 +71,7 @@ jobs:
           kind: Deployment
           metadata:
             name: api-deployment
-            namespace: approval
+            namespace: production
             labels:
               app: api
           spec:
@@ -107,7 +107,7 @@ jobs:
           kind: Service
           metadata:
             name: api-service
-            namespace: approval
+            namespace: production
           spec:
             selector:
               app: api
@@ -125,7 +125,7 @@ jobs:
           kind: Secret
           metadata:
             name: api-database-secret
-            namespace: approval
+            namespace: production
           type: Opaque
           data:
             DATABASE_URL: cG9zdGdyZXNxbDovL3Bvc3RncmVzOjUyMzVAcG9zdGdyZXMtc2VydmljZTo1NDMyL3Bvc3RncmVzP3NjaGVtYT1wdWJsaWM=
@@ -137,4 +137,4 @@ jobs:
           kubectl apply -f api-database-secret.yaml
           kubectl apply -f api-deployment.yaml
           kubectl apply -f api-service.yaml
-          kubectl rollout restart deployment api-deployment -n approval
+          kubectl rollout restart deployment api-deployment -n production
