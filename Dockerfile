@@ -13,7 +13,7 @@ COPY . .
 
 # Gera o Prisma Client com base no schema.prisma
 RUN npx prisma generate
-
+RUN npx prisma db push
 # Constrói a aplicação NestJS
 RUN npm run build
 
