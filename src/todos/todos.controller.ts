@@ -20,10 +20,10 @@ export class TodosController {
     return this.todosService.create(createTodoDto);
   }
 
-  @Get()
-  findAll() {
-    return this.todosService.findAll();
-  }
+  // @Get()
+  // findAll() {
+  //   return this.todosService.findAll();
+  // }
 
   @Get(':id')
   findOne(@Param('id') id: string) {
