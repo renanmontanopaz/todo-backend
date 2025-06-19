@@ -7,11 +7,11 @@ provider "helm" {
 }
 
 # Cria o namespace para o Grafana
-resource "kubernetes_namespace" "monitoring" {
-  metadata {
-    name = "monitoring"
-  }
-}
+# resource "kubernetes_namespace" "monitoring" {
+#   metadata {
+#     name = "monitoring"
+#   }
+# }
 
 # --- LINHA ADICIONADA AQUI ---
 # Cria o namespace para a aplicação
