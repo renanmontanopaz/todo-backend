@@ -15,11 +15,11 @@ provider "helm" {
 
 # --- LINHA ADICIONADA AQUI ---
 # Cria o namespace para a aplicação
-resource "kubernetes_namespace" "production" {
-  metadata {
-    name = "production"
-  }
-}
+# resource "kubernetes_namespace" "production" {
+#   metadata {
+#     name = "production"
+#   }
+# }
 # -----------------------------
 
 # Instala o Grafana
