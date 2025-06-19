@@ -4,17 +4,17 @@ provider "google" {
   region  = "us-central1"
 }
 
-# Define o provedor do Kubernetes. Note o sinal de igual.
+# Define o provedor do Kubernetes. Note a sintaxe de interpolação correta com ${...}
 provider "kubernetes" {
-  host                   = "https://$(data.google_container_cluster.primary.endpoint)"
+  host                   = "https://{data.google_container_cluster.primary.endpoint}"
   cluster_ca_certificate = base64decode(data.google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
   token                  = data.google_client_config.default.access_token
 }
 
-# Define o provedor do Helm para instalar o Grafana. Note o sinal de igual no argumento "kubernetes".
+# Define o provedor do Helm. Note a sintaxe de interpolação correta com ${...}
 provider "helm" {
   kubernetes = {
-    host                   = "https://$(data.google_container_cluster.primary.endpoint)"
+    host                   = "https://{data.google_container_cluster.primary.endpoint}"
     cluster_ca_certificate = base64decode(data.google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
     token                  = data.google_client_config.default.access_token
   }
@@ -43,8 +43,6 @@ resource "google_container_cluster" "primary" {
 
   # Habilita o Google Cloud Managed Service for Prometheus e os componentes de sistema
   monitoring_config {
-    # --- LINHA CORRIGIDA ---
-    # Declara explicitamente o monitoramento de sistema exigido pelo Autopilot
     enable_components = ["SYSTEM_COMPONENTS"]
 
     managed_prometheus {
