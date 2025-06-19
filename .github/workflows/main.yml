@@ -8,16 +8,16 @@ on:
 
 env:
   PROJECT_ID: ${{ secrets.PROJECT_ID }}
-  GKE_CLUSTER: 'autopilot-cluster-stage' # Nome definido no seu arquivo terraform (main.tf)
-  GKE_LOCATION: 'us-central1'         # Localização definida no seu arquivo terraform (main.tf)
+  GKE_CLUSTER: 'autopilot-cluster-stage'
+  GKE_LOCATION: 'us-central1'
   IMAGE: api-nestjs
 
 permissions:
   contents: read
-  id-token: write # Permissão necessária para autenticação segura no GCP
+  id-token: write
 
 jobs:
-  # --- JOB 1: PROVISIONAMENTO DA INFRAESTRUTURA COM TERRAFORM ---
+  # --- JOB 1: PROVISIONAMENTO DA INFRAESTRUTURA (CLUSTER GKE) ---
   provision-infrastructure:
     name: Provision GKE Cluster
     runs-on: ubuntu-latest
@@ -33,25 +33,50 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.5.0
 
-      - name: Terraform Init
+      - name: Terraform Init (Infra)
         run: terraform init
+        working-directory: ./infra # Executa na pasta de infra
 
-      - name: Terraform Apply
+      - name: Terraform Apply (Infra)
         run: terraform apply -auto-approve
+        working-directory: ./infra # Executa na pasta de infra
 
-  # --- JOB 2: BUILD E DEPLOY DA APLICAÇÃO (DEPENDE DO JOB 1) ---
-  build-and-deploy-app:
-    name: Build and Deploy Application
+  # --- JOB 2: DEPLOY DA CONFIGURAÇÃO K8S E DA APLICAÇÃO ---
+  deploy-to-k8s:
+    name: Deploy K8s Config and Application
     runs-on: ubuntu-latest
-    needs: provision-infrastructure # Garante que este job só rode após o sucesso do job de infraestrutura
+    needs: provision-infrastructure # Depende da criação do cluster
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
+      - name: Setup Google Cloud CLI
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # Configura o kubectl para falar com o cluster criado
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v1
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_LOCATION }}
+
+      # --- ETAPA DE CONFIGURAÇÃO DO KUBERNETES COM TERRAFORM ---
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Terraform Init (K8s)
+        run: terraform init
+        working-directory: ./k8s # Executa na pasta k8s
+
+      - name: Terraform Apply (K8s)
+        run: terraform apply -auto-approve
+        working-directory: ./k8s # Executa na pasta k8s
+
+      # --- ETAPA DE DEPLOY DA APLICAÇÃO (SEU CÓDIGO ORIGINAL) ---
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
@@ -67,32 +92,25 @@ jobs:
           context: .
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
-      - name: Setup Google Cloud CLI
-        uses: google-github-actions/auth@v1
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Get GKE credentials
-        uses: google-github-actions/get-gke-credentials@v1
-        with:
-          cluster_name: ${{ env.GKE_CLUSTER }}
-          location: ${{ env.GKE_LOCATION }}
-          project_id: ${{ env.PROJECT_ID }}
-
-      # Seus passos para criar manifests e fazer o deploy continuam os mesmos
-      - name: Create API deployment file
+      # Seus passos para criar manifests e fazer o deploy da API
+      - name: Deploy API to GKE
         run: |
-          cat <<EOF > api-deployment.yaml
-          apiVersion: apps/v1
+          # Use manifests salvos no repo ou continue criando-os aqui
+          echo "apiVersion: v1
+          kind: Secret
+          metadata:
+            name: api-database-secret
+            namespace: production
+          type: Opaque
+          data:
+            DATABASE_URL: cG9zdGdyZXNxbDovL3Bvc3RncmVzOjUyMzVAcG9zdGdyZXMtc2VydmljZTo1NDMyL3Bvc3RncmVzP3NjaGVtYT1wdWJsaWM=" | kubectl apply -f -
+
+          echo "apiVersion: apps/v1
           kind: Deployment
           metadata:
             name: api-deployment
             namespace: production
-            labels:
-              app: api
           spec:
             replicas: 1
             selector:
@@ -116,13 +134,9 @@ jobs:
                             key: DATABASE_URL
                     envFrom:
                       - secretRef:
-                          name: postgres-secrets
-          EOF
+                          name: postgres-secrets" | kubectl apply -f -
 
-      - name: Create API service file
-        run: |
-          cat <<EOF > api-service.yaml
-          apiVersion: v1
+          echo "apiVersion: v1
           kind: Service
           metadata:
             name: api-service
@@ -134,25 +148,6 @@ jobs:
               - protocol: TCP
                 port: 80
                 targetPort: 8080
-            type: ClusterIP
-          EOF
+            type: ClusterIP" | kubectl apply -f -
 
-      - name: Create API database secret
-        run: |
-          cat <<EOF > api-database-secret.yaml
-          apiVersion: v1
-          kind: Secret
-          metadata:
-            name: api-database-secret
-            namespace: production
-          type: Opaque
-          data:
-            DATABASE_URL: cG9zdGdyZXNxbDovL3Bvc3RncmVzOjUyMzVAcG9zdGdyZXMtc2VydmljZTo1NDMyL3Bvc3RncmVzP3NjaGVtYT1wdWJsaWM=
-          EOF
-
-      - name: Deploy to GKE
-        run: |
-          kubectl apply -f api-database-secret.yaml
-          kubectl apply -f api-deployment.yaml
-          kubectl apply -f api-service.yaml
           kubectl rollout restart deployment api-deployment -n production
