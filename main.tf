@@ -4,17 +4,19 @@ provider "google" {
   region  = "us-central1"
 }
 
-# Define o provedor do Kubernetes. Ele será configurado depois que o cluster for criado.
+# --- CORREÇÃO AQUI ---
+# Define o provedor do Kubernetes. Note o sinal de igual.
 provider "kubernetes" {
-  host                   = "https://{data.google_container_cluster.primary.endpoint}"
+  host                   = "https://$(data.google_container_cluster.primary.endpoint)"
   cluster_ca_certificate = base64decode(data.google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
   token                  = data.google_client_config.default.access_token
 }
 
-# Define o provedor do Helm para instalar o Grafana
+# --- CORREÇÃO AQUI ---
+# Define o provedor do Helm para instalar o Grafana. Note o sinal de igual no argumento "kubernetes".
 provider "helm" {
-  kubernetes {
-    host                   = "https://{data.google_container_cluster.primary.endpoint}"
+  kubernetes = {
+    host                   = "https://$(data.google_container_cluster.primary.endpoint)"
     cluster_ca_certificate = base64decode(data.google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
     token                  = data.google_client_config.default.access_token
   }
@@ -41,9 +43,7 @@ resource "google_container_cluster" "primary" {
   # Habilita o modo Autopilot
   enable_autopilot = true
 
-  # --- ALTERAÇÃO PRINCIPAL AQUI ---
   # Habilita o Google Cloud Managed Service for Prometheus
-  # Isto substitui o comando "gcloud ... --enable-managed-prometheus"
   monitoring_config {
     managed_prometheus {
       enabled = true
@@ -62,9 +62,8 @@ resource "kubernetes_namespace" "monitoring" {
 }
 
 # Recurso para instalar o Grafana usando o Helm
-# Isto substitui o comando "helm install ..."
 resource "helm_release" "grafana" {
-  name       = "grafana-dashboard" # Usando o nome que funcionou para evitar conflitos
+  name       = "grafana-dashboard"
   repository = "https://grafana.github.io/helm-charts"
   chart      = "grafana"
   namespace  = kubernetes_namespace.monitoring.metadata[0].name
