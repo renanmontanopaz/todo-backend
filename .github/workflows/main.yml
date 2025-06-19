@@ -1,5 +1,5 @@
-name: Deploy to GKE
-# pipeline
+name: Provision Infra and Deploy to GKE
+
 on:
   push:
     branches: [ develop, main ]
@@ -8,62 +8,85 @@ on:
 
 env:
   PROJECT_ID: ${{ secrets.PROJECT_ID }}
-  GKE_CLUSTER: ${{ secrets.GKE_CLUSTER }}
-  GKE_ZONE: ${{ secrets.GKE_ZONE }}
-  DEPLOYMENT_NAME: api-deployment
+  GKE_CLUSTER: 'autopilot-cluster-stage' # Nome definido no seu arquivo terraform (main.tf)
+  GKE_LOCATION: 'us-central1'         # Localização definida no seu arquivo terraform (main.tf)
   IMAGE: api-nestjs
 
+permissions:
+  contents: read
+  id-token: write # Permissão necessária para autenticação segura no GCP
+
 jobs:
-  setup-build-publish-deploy:
-    name: Setup, Build, Publish, and Deploy
+  # --- JOB 1: PROVISIONAMENTO DA INFRAESTRUTURA COM TERRAFORM ---
+  provision-infrastructure:
+    name: Provision GKE Cluster
     runs-on: ubuntu-latest
-    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.0
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+
+  # --- JOB 2: BUILD E DEPLOY DA APLICAÇÃO (DEPENDE DO JOB 1) ---
+  build-and-deploy-app:
+    name: Build and Deploy Application
+    runs-on: ubuntu-latest
+    needs: provision-infrastructure # Garante que este job só rode após o sucesso do job de infraestrutura
 
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      # Configuração do Docker
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      # Login no Docker Hub
       - name: Login to Docker Hub
         uses: docker/login-action@v2
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Build e push da imagem Docker
-      - name: Build and push
+      - name: Build and push Docker image
         uses: docker/build-push-action@v4
         with:
           context: .
           push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/api-nestjs:${{ github.sha }}
+          tags: ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Configuração do Google Cloud SDK
-      - name: Setup Google Cloud CLI
-        uses: google-github-actions/auth@v1
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: 'google-github-actions/auth@v2'
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
-        with:
-          project_id: ${{ secrets.PROJECT_ID }}
-
-      # Configuração do kubectl
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v1
         with:
-          cluster_name: ${{ secrets.GKE_CLUSTER }}
-          location: us-central1
-          project_id: ${{ secrets.PROJECT_ID }}
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_LOCATION }}
+          project_id: ${{ env.PROJECT_ID }}
 
-      # Criação dos arquivos de deploy
+      # Seus passos para criar manifests e fazer o deploy continuam os mesmos
       - name: Create API deployment file
         run: |
           cat <<EOF > api-deployment.yaml
@@ -86,7 +109,7 @@ jobs:
               spec:
                 containers:
                   - name: api
-                    image: ${{ secrets.DOCKER_USERNAME }}/api-nestjs:${{ github.sha }}
+                    image: ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE }}:${{ github.sha }}
                     ports:
                       - containerPort: 8080
                     env:
@@ -131,7 +154,6 @@ jobs:
             DATABASE_URL: cG9zdGdyZXNxbDovL3Bvc3RncmVzOjUyMzVAcG9zdGdyZXMtc2VydmljZTo1NDMyL3Bvc3RncmVzP3NjaGVtYT1wdWJsaWM=
           EOF
 
-      # Deploy no Kubernetes
       - name: Deploy to GKE
         run: |
           kubectl apply -f api-database-secret.yaml
