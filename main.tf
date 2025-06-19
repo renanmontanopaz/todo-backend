@@ -4,33 +4,8 @@ provider "google" {
   region  = "us-central1"
 }
 
-# Define o provedor do Kubernetes. Note a sintaxe de interpolação correta com ${...}
-provider "kubernetes" {
-  host                   = "https://{data.google_container_cluster.primary.endpoint}"
-  cluster_ca_certificate = base64decode(data.google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
-  token                  = data.google_client_config.default.access_token
-}
-
-# Define o provedor do Helm. Note a sintaxe de interpolação correta com ${...}
-provider "helm" {
-  kubernetes = {
-    host                   = "https://{data.google_container_cluster.primary.endpoint}"
-    cluster_ca_certificate = base64decode(data.google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
-    token                  = data.google_client_config.default.access_token
-  }
-}
-
-# Obtém as informações do cluster GKE depois que ele for criado, para configurar os outros provedores
-data "google_container_cluster" "primary" {
-  name     = google_container_cluster.primary.name
-  location = google_container_cluster.primary.location
-  project  = google_container_cluster.primary.project
-
-  # Garante que este data source só será lido após a criação do cluster
-  depends_on = [google_container_cluster.primary]
-}
-
-# Obtém as credenciais de acesso para autenticar no cluster
+# Obtém as credenciais de acesso para autenticar no cluster.
+# Este data source é simples e não depende de outros recursos.
 data "google_client_config" "default" {}
 
 # Recurso principal: O Cluster GKE Autopilot
@@ -44,11 +19,28 @@ resource "google_container_cluster" "primary" {
   # Habilita o Google Cloud Managed Service for Prometheus e os componentes de sistema
   monitoring_config {
     enable_components = ["SYSTEM_COMPONENTS"]
-
     managed_prometheus {
       enabled = true
     }
   }
+}
+
+# --- CORREÇÃO PRINCIPAL AQUI ---
+# Define o provedor do Helm. Ele será inicializado pelo Terraform
+# somente APÓS o recurso "google_container_cluster.primary" ser criado.
+provider "helm" {
+  kubernetes = {
+    host                   = "https://{google_container_cluster.primary.endpoint}"
+    token                  = data.google_client_config.default.access_token
+    cluster_ca_certificate = base64decode(google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
+  }
+}
+
+# Define o provedor do Kubernetes.
+provider "kubernetes" {
+  host                   = "https://{google_container_cluster.primary.endpoint}"
+  token                  = data.google_client_config.default.access_token
+  cluster_ca_certificate = base64decode(google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
 }
 
 # Recurso para criar o namespace "monitoring" onde o Grafana será instalado
@@ -56,9 +48,7 @@ resource "kubernetes_namespace" "monitoring" {
   metadata {
     name = "monitoring"
   }
-
-  # Garante que o namespace só será criado após o cluster existir
-  depends_on = [google_container_cluster.primary]
+  # A dependência no cluster agora é implícita, pois os providers dependem dele.
 }
 
 # Recurso para instalar o Grafana usando o Helm
