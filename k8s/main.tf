@@ -12,7 +12,7 @@ provider "helm" {
 #     name = "monitoring"
 #   }
 # }
-
+#testegsdfgsdfg
 # --- LINHA ADICIONADA AQUI ---
 # Cria o namespace para a aplicação
 # resource "kubernetes_namespace" "production" {
