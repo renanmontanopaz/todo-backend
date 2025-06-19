@@ -5,7 +5,6 @@ provider "google" {
 }
 
 # Obtém as credenciais de acesso para autenticar no cluster.
-# Este data source é simples e não depende de outros recursos.
 data "google_client_config" "default" {}
 
 # Recurso principal: O Cluster GKE Autopilot
@@ -25,20 +24,19 @@ resource "google_container_cluster" "primary" {
   }
 }
 
-# --- CORREÇÃO PRINCIPAL AQUI ---
-# Define o provedor do Helm. Ele será inicializado pelo Terraform
-# somente APÓS o recurso "google_container_cluster.primary" ser criado.
+# --- CORREÇÃO FINAL AQUI ---
+# Define o provedor do Helm. Note a sintaxe de interpolação correta com ${...}
 provider "helm" {
   kubernetes = {
-    host                   = "https://{google_container_cluster.primary.endpoint}"
+    host                   = "https://_**$**_{google_container_cluster.primary.endpoint}"
     token                  = data.google_client_config.default.access_token
     cluster_ca_certificate = base64decode(google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
   }
 }
 
-# Define o provedor do Kubernetes.
+# Define o provedor do Kubernetes. Note a sintaxe de interpolação correta com ${...}
 provider "kubernetes" {
-  host                   = "https://{google_container_cluster.primary.endpoint}"
+  host                   = "https://_**$**_{google_container_cluster.primary.endpoint}"
   token                  = data.google_client_config.default.access_token
   cluster_ca_certificate = base64decode(google_container_cluster.primary.master_auth[0].cluster_ca_certificate)
 }
@@ -48,7 +46,6 @@ resource "kubernetes_namespace" "monitoring" {
   metadata {
     name = "monitoring"
   }
-  # A dependência no cluster agora é implícita, pois os providers dependem dele.
 }
 
 # Recurso para instalar o Grafana usando o Helm
@@ -58,6 +55,5 @@ resource "helm_release" "grafana" {
   chart      = "grafana"
   namespace  = kubernetes_namespace.monitoring.metadata[0].name
 
-  # Garante que a instalação do Helm só ocorrerá após a criação do namespace
   depends_on = [kubernetes_namespace.monitoring]
 }
