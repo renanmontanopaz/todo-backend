@@ -31,16 +31,16 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-
-      - name: Terraform Init (Infra)
-        run: terraform init
-        working-directory: ./infra # Executa na pasta de infra
-
-      - name: Terraform Apply (Infra)
-        run: terraform apply -auto-approve
-        working-directory: ./infra # Executa na pasta de infra
+#      - name: Setup Terraform
+#        uses: hashicorp/setup-terraform@v2
+#
+#      - name: Terraform Init (Infra)
+#        run: terraform init
+#        working-directory: ./infra # Executa na pasta de infra
+#
+#      - name: Terraform Apply (Infra)
+#        run: terraform apply -auto-approve
+#        working-directory: ./infra # Executa na pasta de infra
 
   # --- JOB 2: DEPLOY DA CONFIGURAÇÃO K8S E DA APLICAÇÃO ---
   deploy-to-k8s:
@@ -65,16 +65,16 @@ jobs:
           location: ${{ env.GKE_LOCATION }}
 
       # --- ETAPA DE CONFIGURAÇÃO DO KUBERNETES COM TERRAFORM ---
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
-
-      - name: Terraform Init (K8s)
-        run: terraform init -reconfigure
-        working-directory: ./k8s # Executa na pasta k8s
-
-      - name: Terraform Apply (K8s)
-        run: terraform apply -auto-approve
-        working-directory: ./k8s # Executa na pasta k8s
+#      - name: Setup Terraform
+#        uses: hashicorp/setup-terraform@v2
+#
+#      - name: Terraform Init (K8s)
+#        run: terraform init -reconfigure
+#        working-directory: ./k8s # Executa na pasta k8s
+#
+#      - name: Terraform Apply (K8s)
+#        run: terraform apply -auto-approve
+#        working-directory: ./k8s # Executa na pasta k8s
 
       # --- ETAPA DE DEPLOY DA APLICAÇÃO (SEU CÓDIGO ORIGINAL) ---
       - name: Set up Docker Buildx
