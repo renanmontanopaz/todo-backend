@@ -35,7 +35,7 @@ jobs:
         uses: hashicorp/setup-terraform@v2
 
       - name: Terraform Init (Infra)
-        run: terraform init
+        run: terraform init -reconfigure
         working-directory: ./infra # Executa na pasta de infra
 
       - name: Terraform Apply (Infra)
@@ -69,7 +69,7 @@ jobs:
         uses: hashicorp/setup-terraform@v2
 
       - name: Terraform Init (K8s)
-        run: terraform init
+        run: terraform init -reconfigure
         working-directory: ./k8s # Executa na pasta k8s
 
       - name: Terraform Apply (K8s)
