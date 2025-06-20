@@ -141,6 +141,9 @@ jobs:
           metadata:
             name: api-service
             namespace: production
+            annotations:
+              prometheus.io/scrape: 'true'   # Habilita a coleta
+              prometheus.io/port: '8080'
           spec:
             selector:
               app: api
