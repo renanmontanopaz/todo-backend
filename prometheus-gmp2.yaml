@@ -1,0 +1,263 @@
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: gmp-test:prometheus-test
+rules:
+- apiGroups: [""]
+  resources:
+  - pods
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: gmp:prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: gmp:prometheus
+subjects:
+- kind: ServiceAccount
+  namespace: monitoring
+  name: default
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: monitoring
+  name: prometheus
+  labels:
+    prometheus: gmp
+spec:
+  type: ClusterIP
+  selector:
+    app: prometheus
+    prometheus: gmp
+  ports:
+  - name: web
+    port: 9090
+    targetPort: web
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  namespace: monitoring
+  name: prometheus
+  annotations:
+    # The emptyDir for the storage and config directories prevents cluster
+    # autoscaling unless this annotation is set. See
+    # https://github.com/kubernetes/autoscaler/blob/master/cluster-autoscaler/FAQ.md#what-types-of-pods-can-prevent-ca-from-removing-a-node
+    # for details.
+    cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+  labels:
+    prometheus: gmp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+      prometheus: gmp
+  serviceName: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+        prometheus: gmp
+    spec:
+      automountServiceAccountToken: true
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                - arm64
+                - amd64
+              - key: kubernetes.io/os
+                operator: In
+                values:
+                - linux
+      initContainers:
+      - name: config-init
+        image: gke.gcr.io/gke-distroless/bash:gke_distroless_20240607.00_p0
+        command: ['/bin/bash', '-c', 'touch /prometheus/config_out/config.yaml']
+        volumeMounts:
+        - name: config-out
+          mountPath: /prometheus/config_out
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - all
+          privileged: false
+      containers:
+      - name: prometheus
+        image: gke.gcr.io/prometheus-engine/prometheus:v2.45.3-gmp.7-gke.0
+        args:
+        - --config.file=/prometheus/config_out/config.yaml
+        - --storage.tsdb.path=/prometheus/data
+        - --storage.tsdb.retention.time=24h
+        - --web.enable-lifecycle
+        - --storage.tsdb.no-lockfile
+        - --web.route-prefix=/
+        ports:
+        - name: web
+          containerPort: 9090
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: web
+            scheme: HTTP
+        resources:
+          requests:
+            memory: 400Mi
+        volumeMounts:
+        - name: config-out
+          mountPath: /prometheus/config_out
+          readOnly: true
+        - name: prometheus-db
+          mountPath: /prometheus/data
+      - name: config-reloader
+        image: gke.gcr.io/prometheus-engine/config-reloader:v0.12.0-gke.5
+        args:
+        - --config-file=/prometheus/config/config.yaml
+        - --config-file-output=/prometheus/config_out/config.yaml
+        - --reload-url=http://localhost:9090/-/reload
+        - --ready-url=http://localhost:9090/-/ready
+        - --listen-address=:19091
+        ports:
+        - name: reloader-web
+          containerPort: 8080
+        resources:
+          limits:
+            memory: 50Mi
+          requests:
+            cpu: 100m
+            memory: 50Mi
+        volumeMounts:
+        - name: config
+          mountPath: /prometheus/config
+        - name: config-out
+          mountPath: /prometheus/config_out
+      terminationGracePeriodSeconds: 600
+      volumes:
+      - name: prometheus-db
+        emptyDir: {}
+      - name: config
+        configMap:
+          name: prometheus
+          defaultMode: 420
+      - name: config-out
+        emptyDir: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: monitoring
+  name: prometheus
+  labels:
+    prometheus: gmp
+data:
+  config.yaml: |
+    global:
+      scrape_interval: 30s
+
+    scrape_configs:
+    # Let Prometheus scrape itself.
+    - job_name: prometheus
+      static_configs:
+      - targets: ['localhost:9090']
+
+    # Scrape pods with label app=prom-example across all namespaces
+    # on the port named 'metrics'.
+    - job_name: 'kubernetes-pods'
+      kubernetes_sd_configs:
+      - role: pod
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        regex: true
+        action: keep
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name, __meta_kubernetes_pod_container_port_name, __meta_kubernetes_pod_phase]
+        regex: (.+);(.+)
+        target_label: instance
+        replacement: $1:$2
+        action: replace
+      - source_labels: [__meta_kubernetes_pod_container_port_name]
+        regex: metrics
+        action: keep
+        
+    - job_name: 'kubernetes-service-endpoints'
+      kubernetes_sd_configs:
+      - role: endpoints
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+        action: replace
+        target_label: __scheme__
+        regex: (https?)
+      - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+      - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+        action: replace
+        target_label: __address__
+        regex: ([^:]+)(?::\d+)?;(\d+)
+        replacement: $1:$2
+      - action: labelmap
+        regex: __meta_kubernetes_service_label_(.+)
+      - source_labels: [__meta_kubernetes_namespace]
+        action: replace
+        target_label: kubernetes_namespace
+      - source_labels: [__meta_kubernetes_service_name]
+        action: replace
+        target_label: kubernetes_name
+      # Esta configuração descobre e coleta métricas de todos os SERVIÇOS.
+    - job_name: 'kubernetes-service-endpoints'
+      kubernetes_sd_configs:
+        - role: endpoints
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+          action: replace
+          target_label: __scheme__
+          regex: (https?)
+        - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+          action: replace
+          target_label: __metrics_path__
+          regex: (.+)
+        - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+          action: replace
+          target_label: __address__
+          regex: ([^:]+)(?::\d+)?;(\d+)
+          replacement: $1:$2
+        - action: labelmap
+          regex: __meta_kubernetes_service_label_(.+)
+        - source_labels: [__meta_kubernetes_namespace]
+          action: replace
+          target_label: kubernetes_namespace
+        - source_labels: [__meta_kubernetes_service_name]
+          action: replace
+          target_label: kubernetes_name
