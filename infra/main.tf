@@ -1,10 +1,10 @@
 
-terraform {
-  backend "gcs" {
-    bucket = "tfstate-gke-standard-renanmphp" # Use o mesmo nome do bucket que você criou
-    prefix = "standard-infra"             # Pasta para o estado da infraestrutura
-  }
-}
+# terraform {
+#   backend "gcs" {
+#     bucket = "tfstate-gke-standard-renanmphp" # Use o mesmo nome do bucket que você criou
+#     prefix = "standard-infra"             # Pasta para o estado da infraestrutura
+#   }
+# }
 provider "google" {
   # Lembre-se de apontar para o SEU NOVO PROJETO
   project = "meu-projeto-prod"

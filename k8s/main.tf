@@ -1,9 +1,9 @@
-terraform {
-  backend "gcs" {
-    bucket = "tfstate-gke-standard-renanmphp" # Use o mesmo nome do bucket que você criou
-    prefix = "standard-infra"             # Pasta para o estado da infraestrutura
-  }
-}
+# terraform {
+#   backend "gcs" {
+#     bucket = "tfstate-gke-standard-renanmphp" # Use o mesmo nome do bucket que você criou
+#     prefix = "standard-infra"             # Pasta para o estado da infraestrutura
+#   }
+# }
 # Provedores Kubernetes e Helm (a configuração agora é inferida pelo ambiente da pipeline)
 provider "kubernetes" {}
 provider "helm" {}
