@@ -1,4 +1,4 @@
-# bucket
+
 terraform {
   backend "gcs" {
     bucket = "tfstate-gke-standard-renanmphp" # Use o mesmo nome do bucket que você criou
