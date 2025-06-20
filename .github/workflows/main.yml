@@ -152,5 +152,8 @@ jobs:
                 port: 80
                 targetPort: 8080
             type: ClusterIP" | kubectl apply -f -
-
+          kubectl apply -f postgres-pvc.yaml -n production
+          kubectl apply -f postgres-secrets.yaml -n production
+          kubectl apply -f postgres-deployment.yaml -n production
+          kubectl apply -f postgres-service.yaml -n production
           kubectl rollout restart deployment api-deployment -n production
