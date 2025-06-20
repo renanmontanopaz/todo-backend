@@ -13,19 +13,19 @@ provider "google" {
 #   initial_node_count       = 3
 # }
 
-resource "google_container_node_pool" "primary_nodes" {
-  name       = "default-pool"
-  cluster    = google_container_cluster.primary.name
-  location   = google_container_cluster.primary.location
-  node_count = 3 # Começamos com 1 nó, mas podemos habilitar o autoscaling
-
-  node_config {
-    # e2-medium é uma máquina boa e de custo-benefício para começar
-    machine_type = "e2-micro"
-    disk_size_gb = 50
-
-    oauth_scopes = [
-      "https://www.googleapis.com/auth/cloud-platform"
-    ]
-  }
-}
+# resource "google_container_node_pool" "primary_nodes" {
+#   name       = "default-pool"
+#   cluster    = google_container_cluster.primary.name
+#   location   = google_container_cluster.primary.location
+#   node_count = 3 # Começamos com 1 nó, mas podemos habilitar o autoscaling
+#
+#   node_config {
+#     # e2-medium é uma máquina boa e de custo-benefício para começar
+#     machine_type = "e2-micro"
+#     disk_size_gb = 50
+#
+#     oauth_scopes = [
+#       "https://www.googleapis.com/auth/cloud-platform"
+#     ]
+#   }
+# }
