@@ -10,7 +10,7 @@ resource "google_container_cluster" "primary" {
 
   # Remove o pool de nós padrão para criarmos um customizado
   remove_default_node_pool = true
-  initial_node_count       = 1
+  initial_node_count       = 3
 }
 
 resource "google_container_node_pool" "primary_nodes" {
