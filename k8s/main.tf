@@ -4,18 +4,18 @@ provider "kubernetes" {}
 provider "helm" {}
 
 # Cria o namespace para a aplicação
-# resource "kubernetes_namespace" "production" {
-#   metadata {
-#     name = "production"
-#   }
-# }
-#
-# # Cria o namespace para o monitoramento
-# resource "kubernetes_namespace" "monitoring" {
-#   metadata {
-#     name = "monitoring"
-#   }
-# }
+resource "kubernetes_namespace" "production" {
+  metadata {
+    name = "production"
+  }
+}
+
+# Cria o namespace para o monitoramento
+resource "kubernetes_namespace" "monitoring" {
+  metadata {
+    name = "monitoring"
+  }
+}
 
 # Instala a PILHA COMPLETA de monitoramento
 resource "helm_release" "prometheus_stack" {
