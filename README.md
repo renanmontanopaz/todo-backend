@@ -1,98 +1,134 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+PROJETO DE ARQUITETURA MULTINUVEM COM CI/CD NO GCP
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Este repositório contém um projeto de automação de infraestrutura e deploy contínuo que simula uma arquitetura multinuvem utilizando dois ambientes distintos (Homologação e Produção) no Google Cloud Platform (GCP).
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+O objetivo é demonstrar o provisionamento de infraestrutura como código (IaC) com Terraform, orquestração de contêineres com Google Kubernetes Engine (GKE), e a criação de pipelines de CI/CD completas com GitHub Actions.
 
-## Description
+--------------------------------------------------
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+TABELA DE CONTEÚDO
 
-## Project setup
+* Arquitetura da Solução
+* Descrição dos Ambientes
+* Tecnologias Utilizadas
+* Instruções de Uso
+* Observações Adicionais
+* Autor
 
-```bash
-$ npm install
-```
+--------------------------------------------------
 
-## Compile and run the project
+ARQUITETURA DA SOLUÇÃO
 
-```bash
-# development
-$ npm run start
+A solução é composta por dois ambientes independentes, cada um em seu próprio projeto GCP, para garantir o isolamento completo entre Homologação (Stage) e Produção (Prod).
 
-# watch mode
-$ npm run start:dev
+- Infraestrutura como Código (IaC): O TERRAFORM é utilizado para provisionar e gerenciar todos os recursos na nuvem, incluindo: Cluster GOOGLE KUBERNETES ENGINE (GKE) para orquestração, ARTIFACT REGISTRY para armazenamento seguro das imagens Docker, e Contas de Serviço (Service Accounts) e permissões de IAM.
 
-# production mode
-$ npm run start:prod
-```
+- CI/CD com GitHub Actions: Quatro pipelines de automação foram configuradas para gerenciar o ciclo de vida das aplicações (backend e frontend):
+    1. Build & Push: Compila o código da aplicação, cria uma imagem Docker e a envia para o Artifact Registry.
+    2. Infra & Deploy: Garante que a infraestrutura esteja no estado desejado (via Terraform) e realiza o deploy da nova versão da aplicação no cluster GKE utilizando HELM.
 
-## Run tests
+- Monitoramento: A stack PROMETHEUS + GRAFANA, instalada via Helm Chart (kube-prometheus-stack), é implantada em cada cluster para coletar e visualizar métricas-chave, como uso de CPU, memória e status dos Pods.
 
-```bash
-# unit tests
-$ npm run test
+--------------------------------------------------
 
-# e2e tests
-$ npm run test:e2e
+DESCRIÇÃO DOS AMBIENTES
 
-# test coverage
-$ npm run test:cov
-```
+* Ambiente de Homologação (Stage)
+- Propósito: Ambiente para testes de integração e validação de novas funcionalidades antes de irem para produção.
+- Projeto GCP: [ID_DO_SEU_PROJETO_STAGE]
+- Gatilho de Deploy: Push ou merge na branch "develop".
+- URL da Aplicação: http://[IP_EXTERNO_DA_APP_STAGE]
+- URL do Grafana: http://[IP_EXTERNO_DO_GRAFANA_STAGE]
 
-## Deployment
+* Ambiente de Produção (Production)
+- Propósito: Ambiente vivo, acessível aos usuários finais.
+- Projeto GCP: [ID_DO_SEU_PROJETO_PROD]
+- Gatilho de Deploy: Push ou merge na branch "main".
+- URL da Aplicação: http://[IP_EXTERNO_DA_APP_PROD]
+- URL do Grafana: http://[IP_EXTERNO_DO_GRAFANA_PROD]
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+--------------------------------------------------
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+TECNOLOGIAS UTILIZADAS
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
+- Cloud: Google Cloud Platform (GCP)
+- CI/CD: GitHub Actions
+- Infraestrutura como Código: Terraform
+- Contêineres: Docker
+- Orquestração: Google Kubernetes Engine (GKE)
+- Gerenciador de Pacotes K8s: Helm
+- Monitoramento: Prometheus & Grafana
+- Backend: Node.js + TypeScript
+- Frontend: React + TypeScript
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+--------------------------------------------------
 
-## Resources
+INSTRUÇÕES DE USO
 
-Check out a few resources that may come in handy when working with NestJS:
+Siga os passos abaixo para replicar o ambiente.
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+* Pré-requisitos
 
-## Support
+- Conta no Google Cloud com Faturamento ativado.
+- Terraform (v1.0+)
+- Google Cloud SDK (gcloud CLI)
+- kubectl
+- Docker
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+* Configuração do Ambiente
 
-## Stay in touch
+1. Clone o Repositório:
+git clone [URL_DO_SEU_REPOSITORIO]
+cd [NOME_DO_REPOSITORIO]
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+2. Configure os Projetos GCP:
+- Crie dois projetos no GCP (um para Stage, outro para Prod).
+- Em cada projeto, ative as APIs: Kubernetes Engine API, Artifact Registry API, Compute Engine API, Cloud Resource Manager API.
+- Configure a autenticação segura entre o GitHub e o GCP utilizando WORKLOAD IDENTITY FEDERATION. Siga o guia oficial para criar um Pool, um Provider e uma Service Account com as permissões necessárias.
 
-## License
+3. Configure os Secrets do GitHub:
+- No seu repositório GitHub, vá em "Settings > Secrets and variables > Actions".
+- Crie os seguintes secrets com os valores obtidos no passo anterior:
+    GCP_PROJECT_ID_STAGE
+    GCP_PROJECT_ID_PROD
+    GCP_WORKLOAD_IDENTITY_PROVIDER_STAGE
+    GCP_WORKLOAD_IDENTITY_PROVIDER_PROD
+    GCP_SERVICE_ACCOUNT_STAGE
+    GCP_SERVICE_ACCOUNT_PROD
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+* Executando as Pipelines
+
+O deploy é acionado automaticamente com base na estratégia de branches:
+
+- Deploy para Stage: Faça um push para a branch "develop".
+- Deploy para Produção: Faça um merge em "main" ou um push direto para a branch.
+- Acompanhe a execução das pipelines na aba "Actions" do seu repositório no GitHub.
+
+* Acesso às Aplicações e Monitoramento
+
+1. Conecte-se ao Cluster:
+   # Para Stage
+   gcloud container clusters get-credentials gke-cluster-stage --region [SUA_REGIAO] --project [ID_DO_SEU_PROJETO_STAGE]
+
+   # Para Prod
+   gcloud container clusters get-credentials gke-cluster-prod --region [SUA_REGIAO] --project [ID_DO_SEU_PROJETO_PROD]
+
+2. Encontre o IP da Aplicação e do Grafana:
+   Para obter o IP externo de cada serviço, execute:
+   kubectl get services --all-namespaces
+   Procure na coluna EXTERNAL-IP pelos serviços correspondentes.
+
+3. Acesse o Grafana:
+   - Usuário: admin
+   - Senha: Obtenha a senha gerada automaticamente com o comando:
+     kubectl get secret prometheus-grafana -n monitoring -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+
+--------------------------------------------------
+
+OBSERVAÇÕES ADICIONAIS
+
+- GERENCIAMENTO DE ESTADO DO TERRAFORM: O estado do Terraform é armazenado de forma segura e remota em um bucket do Google Cloud Storage, configurado no bloco `backend "gcs"` de cada ambiente. Isso é crucial para a execução em pipelines e trabalho em equipe.
+
+- SEGURANÇA: A autenticação das pipelines é feita via WORKLOAD IDENTITY FEDERATION, que é a prática recomendada pelo Google. Isso evita o uso de chaves de serviço estáticas e de longa duração, aumentando significativamente a segurança.
+
+- CUSTO: Os recursos criados nesta arquitetura (Clusters GKE, Load Balancers, etc.) incorrem em custos no GCP. Lembre-se de destruir a infraestrutura após a avaliação para evitar cobranças, utilizando o comando "terraform destroy" em cada diretório de ambiente.
