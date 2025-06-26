@@ -2,13 +2,13 @@ name: Provision Infra and Deploy to GKE
 
 on:
   push:
-    branches: [ develop ]
+    branches: [ develop, main ]
   pull_request:
-    branches: [ develop ]
-# terraform
+    branches: [ develop, main ]
+
 env:
   PROJECT_ID: ${{ secrets.PROJECT_ID }}
-  GKE_CLUSTER: 'gke-standard-cluster'
+  GKE_CLUSTER: 'autopilot-cluster-stage'
   GKE_LOCATION: 'us-central1'
   IMAGE: api-nestjs
 
