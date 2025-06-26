@@ -14,7 +14,7 @@ resource "kubernetes_namespace" "monitoring" {
 }
 #testegsdfgsdfg
 # --- LINHA ADICIONADA AQUI ---
-Cria o namespace para a aplicação
+#Cria o namespace para a aplicação
 resource "kubernetes_namespace" "production" {
   metadata {
     name = "production"
