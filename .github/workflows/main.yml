@@ -2,12 +2,12 @@ name: Provision Infra and Deploy to GKE
 
 on:
   push:
-    branches: [ main ]
+    branches: [ develop ]
   pull_request:
-    branches: [ main ]
+    branches: [ develop ]
 # terraform
 env:
-  PROJECT_ID: ${{ secrets.PROJECT_ID_PROD }}
+  PROJECT_ID: ${{ secrets.PROJECT_ID }}
   GKE_CLUSTER: 'gke-standard-cluster'
   GKE_LOCATION: 'us-central1'
   IMAGE: api-nestjs
@@ -29,7 +29,7 @@ jobs:
       - name: Setup Google Cloud CLI
         uses: google-github-actions/auth@v1
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
@@ -55,7 +55,7 @@ jobs:
       - name: Setup Google Cloud CLI
         uses: google-github-actions/auth@v1
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY_PROD }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       # Configura o kubectl para falar com o cluster criado
       - name: Get GKE credentials
